@@ -1,0 +1,6 @@
+{
+  "name": "SakuHari",
+  "description": "Aplikasi pencatat keuangan harian (pemasukan, pengeluaran, multi-dompet, anggaran bulanan, dan grafik) serta tugas & jadwal harian dengan sinkronisasi cloud.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

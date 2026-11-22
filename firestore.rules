@@ -1,0 +1,191 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidDateKey(val) {
+      return val is string && val.size() == 10 && val.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isValidMonthKey(val) {
+      return val is string && val.size() == 7 && val.matches('^[0-9]{4}-[0-9]{2}$');
+    }
+
+    function isValidTimeLabel(val) {
+      return val is string && val.size() == 5 && val.matches('^[0-9]{2}:[0-9]{2}$');
+    }
+
+    function isValidColorHex(val) {
+      return val is string && val.size() >= 7 && val.size() <= 9 && val.matches('^#[0-9A-Fa-f]{6,8}$');
+    }
+
+    // --- ENTITY VALIDATION BLUEPRINTS ---
+    function isValidWallet(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 40 &&
+             data.type is string && data.type in ['CASH', 'BANK', 'EWALLET'] &&
+             data.balance is int && data.balance >= -999999999999 && data.balance <= 999999999999 &&
+             isValidColorHex(data.colorHex) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTransaction(data) {
+      return data.type is string && data.type in ['INCOME', 'EXPENSE'] &&
+             data.amount is int && data.amount > 0 && data.amount <= 999999999999 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+             isValidId(data.walletId) &&
+             data.walletName is string && data.walletName.size() >= 1 && data.walletName.size() <= 40 &&
+             data.note is string && data.note.size() <= 200 &&
+             isValidDateKey(data.dateKey) &&
+             isValidMonthKey(data.monthKey) &&
+             isValidTimeLabel(data.timeLabel) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidBudget(data) {
+      return isValidMonthKey(data.monthKey) &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+             data.limitAmount is int && data.limitAmount > 0 && data.limitAmount <= 999999999999 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTask(data) {
+      return data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.notes is string && data.notes.size() <= 400 &&
+             isValidDateKey(data.dateKey) &&
+             (!('startTime' in data) || data.startTime == null || isValidTimeLabel(data.startTime)) &&
+             (!('endTime' in data) || data.endTime == null || isValidTimeLabel(data.endTime)) &&
+             data.priority is string && data.priority in ['HIGH', 'MEDIUM', 'LOW'] &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 30 &&
+             data.completed is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- USER-SCOPED SUBCOLLECTIONS ---
+    match /users/{userId} {
+      // Wallets
+      match /wallets/{walletId} {
+        allow get: if isOwner(userId) && isValidId(walletId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(walletId) &&
+                         incoming().keys().hasAll(['name', 'type', 'balance', 'colorHex', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['name', 'type', 'balance', 'colorHex', 'createdAt', 'updatedAt']) &&
+                         isValidWallet(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(walletId) &&
+                         isValidWallet(incoming()) &&
+                         incoming().createdAt == existing().createdAt && (
+                           // Action: Balance adjustment (atomic batch with transaction)
+                           incoming().diff(existing()).affectedKeys().hasOnly(['balance', 'updatedAt']) ||
+                           // Action: Full wallet details edit
+                           incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'balance', 'colorHex', 'updatedAt'])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(walletId);
+      }
+
+      // Transactions
+      match /transactions/{txId} {
+        allow get: if isOwner(userId) && isValidId(txId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(txId) &&
+                         incoming().keys().hasAll(['type', 'amount', 'category', 'walletId', 'walletName', 'note', 'dateKey', 'monthKey', 'timeLabel', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['type', 'amount', 'category', 'walletId', 'walletName', 'note', 'dateKey', 'monthKey', 'timeLabel', 'createdAt', 'updatedAt']) &&
+                         isValidTransaction(incoming()) &&
+                         existsAfter(/databases/$(database)/documents/users/$(userId)/wallets/$(incoming().walletId));
+
+        allow update: if isOwner(userId) &&
+                         isValidId(txId) &&
+                         isValidTransaction(incoming()) &&
+                         incoming().createdAt == existing().createdAt && (
+                           // Action: Edit transaction details
+                           incoming().diff(existing()).affectedKeys().hasOnly(['type', 'amount', 'category', 'walletId', 'walletName', 'note', 'dateKey', 'monthKey', 'timeLabel', 'updatedAt'])
+                         ) &&
+                         existsAfter(/databases/$(database)/documents/users/$(userId)/wallets/$(incoming().walletId));
+
+        allow delete: if isOwner(userId) && isValidId(txId);
+      }
+
+      // Monthly Budgets
+      match /budgets/{budgetId} {
+        allow get: if isOwner(userId) && isValidId(budgetId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(budgetId) &&
+                         incoming().keys().hasAll(['monthKey', 'category', 'limitAmount', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['monthKey', 'category', 'limitAmount', 'createdAt', 'updatedAt']) &&
+                         isValidBudget(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(budgetId) &&
+                         isValidBudget(incoming()) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().monthKey == existing().monthKey &&
+                         incoming().category == existing().category && (
+                           // Action: Adjust monthly limit
+                           incoming().diff(existing()).affectedKeys().hasOnly(['limitAmount', 'updatedAt'])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(budgetId);
+      }
+
+      // Daily Tasks & Schedules
+      match /tasks/{taskId} {
+        allow get: if isOwner(userId) && isValidId(taskId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(taskId) &&
+                         incoming().keys().hasAll(['title', 'notes', 'dateKey', 'priority', 'category', 'completed', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['title', 'notes', 'dateKey', 'startTime', 'endTime', 'priority', 'category', 'completed', 'createdAt', 'updatedAt']) &&
+                         isValidTask(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(taskId) &&
+                         isValidTask(incoming()) &&
+                         incoming().createdAt == existing().createdAt && (
+                           // Action: Toggle completion status
+                           incoming().diff(existing()).affectedKeys().hasOnly(['completed', 'updatedAt']) ||
+                           // Action: Edit task or schedule details
+                           incoming().diff(existing()).affectedKeys().hasOnly(['title', 'notes', 'dateKey', 'startTime', 'endTime', 'priority', 'category', 'completed', 'updatedAt'])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(taskId);
+      }
+    }
+  }
+}

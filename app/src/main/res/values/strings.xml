@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">SakuHari</string>
+    <string name="tagline">Keuangan teratur, hari terarah</string>
+    <string name="auth_welcome_title">Atur Keuangan &amp; Hari Anda</string>
+    <string name="auth_welcome_subtitle">Catat pemasukan, pengeluaran, anggaran bulanan, serta tugas dan jadwal harian dalam satu ruang yang tenang dan tersinkronisasi.</string>
+    <string name="auth_sign_in_google">Masuk dengan Google</string>
+    <string name="auth_signing_in">Menghubungkan akun...</string>
+    <string name="auth_sync_note">Data Anda tersimpan aman di cloud dan otomatis sinkron antar perangkat.</string>
+    <string name="nav_home">Beranda</string>
+    <string name="nav_finance">Keuangan</string>
+    <string name="nav_agenda">Agenda</string>
+    <string name="nav_reports">Laporan</string>
+    <string name="action_add_transaction">Catat Transaksi</string>
+    <string name="action_add_agenda">Tambah Agenda</string>
+    <string name="action_add_wallet">Tambah Dompet</string>
+    <string name="action_add_budget">Atur Anggaran</string>
+    <string name="action_save">Simpan</string>
+    <string name="action_cancel">Batal</string>
+    <string name="action_delete">Hapus</string>
+    <string name="action_sign_out">Keluar Akun</string>
+    <string name="action_retry">Coba Lagi</string>
+    <string name="cd_profile">Profil Akun</string>
+    <string name="cd_quick_add">Tambah cepat transaksi atau agenda</string>
+    <string name="cd_auth_illustration">Ilustrasi minimalis dompet dan jadwal harian SakuHari</string>
+    <string name="cd_prev_month">Bulan sebelumnya</string>
+    <string name="cd_next_month">Bulan berikutnya</string>
+    <string name="cd_clear_search">Hapus pencarian</string>
+    <string name="cd_edit_wallet">Edit dompet</string>
+    <string name="cd_toggle_task">Tandai tugas selesai</string>
+</resources>
